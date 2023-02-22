@@ -1,15 +1,16 @@
-const socket = new WebSocket('wss://wbs.mexc.com/ws');
+// 현재호가 개별 order
+const orderSocket = new WebSocket('wss://wbs.mexc.com/ws');
 
-socket.onopen = () => {
+orderSocket.onopen = () => {
   const subscribe = {
     method: 'SUBSCRIPTION', // Diff.Depth Stream
     params: ['spot@public.increase.depth.v3.api@BTCUSDT'], // 현재호가, v가 0이면 로우 제거해야함
   };
 
-  socket.send(JSON.stringify(subscribe));
+  orderSocket.send(JSON.stringify(subscribe));
 };
 
-socket.onmessage = (e) => {
+orderSocket.onmessage = (e) => {
   const message = JSON.parse(e.data);
 
   if (!message.d) {
@@ -19,9 +20,10 @@ socket.onmessage = (e) => {
   postMessage(message);
 };
 
-socket.onclose = (e) => {
+orderSocket.onclose = (e) => {
   console.log('onclose : ', e);
 };
-socket.onerror = (e) => {
+
+orderSocket.onerror = (e) => {
   console.log('onerror : ', e);
 };

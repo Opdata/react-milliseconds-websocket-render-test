@@ -1,4 +1,4 @@
-import Row from './row';
+import Row from './orderItem';
 
 const Table = ({ table }: any) => {
   return table.map(() => {

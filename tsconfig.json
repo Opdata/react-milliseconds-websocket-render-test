@@ -12,9 +12,14 @@
     "module": "esnext",
     "moduleResolution": "node",
     "resolveJsonModule": true,
-    "isolatedModules": true,
+    "isolatedModules": false,
     "noEmit": true,
     "jsx": "react-jsx"
   },
-  "include": ["src", "public/totalOrderBook.js", "src/components"]
+  "include": [
+    "src",
+    "public/totalOrderBook.js",
+    "src/components",
+    "public/order.js"
+  ]
 }

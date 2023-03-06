@@ -1,84 +1,144 @@
-import { useMemo, useCallback } from 'react';
-import { useRecoilState } from 'recoil';
-import { symbolState, bidsState, asksState } from './store/atoms/orderAtoms';
+import { useRef, useEffect, useCallback } from 'react';
+import { useDispatch } from 'react-redux';
 import ItemsGrid from './components/orderGrid';
-import { OrderType, OrderMaps } from './types/orderTypes';
+import { OrderType, OrderMaps, SocketOrder } from './types/orderTypes';
+import {
+  setBidsOrderBook,
+  setAsksOrderBook,
+  addBidsOrder,
+  addAsksOrder,
+} from './store/actions/orderActions';
+import { throttle } from 'lodash';
 
 function App() {
-  const orderBook = useMemo(() => new Worker('./orderbook.js'), []);
-  //   const [myModal, setMyModal] = useRecoilState(orderAtomFamily(''));
-  const [symbol, setSymbol] = useRecoilState(symbolState);
-  const [bids, setBids] = useRecoilState(bidsState);
-  const [asks, setAsks] = useRecoilState(asksState);
-
-  //   const addNewOrder = useCallback((newOrderbook: any) => {
-  //     const convertedObject =
-  //     const convertedOrderBook = newOrderbook.map(
-  //       ({ p: price, v: value }: any) => ({ [price]: value })
-  //     );
-  //     console.log('convertedOrderBook : ', convertedOrderBook);
-  //     return convertedOrderBook;
-  //   }, []);
-
-  const addNewOrder = useCallback(
-    (newOrders: { p: string; v: string }[], initialOrders: OrderMaps) => {
-      return newOrders.reduce((acc, current) => {
-        const { p: price, v: value } = current;
-
-        acc[price] = value;
-
-        return acc;
-      }, initialOrders);
+  const dispatch = useDispatch();
+  const setBids = useCallback(
+    (orders: any) => dispatch(setBidsOrderBook(orders)),
+    [dispatch]
+  );
+  const setAsks = useCallback(
+    (orders: any) => dispatch(setAsksOrderBook(orders)),
+    [dispatch]
+  );
+  const updateBids = useCallback(
+    (orders: any) => {
+      dispatch(addBidsOrder(orders));
     },
-    []
+    [dispatch]
+  );
+  const updateAsks = useCallback(
+    (orders: any) => {
+      dispatch(addAsksOrder(orders));
+    },
+    [dispatch]
   );
 
-  const initialOrderBook = ({ data }: any) => {
-    // console.log('message :', data);
-    // console.log('bids : ', bids);
-    // console.log('asks : ', asks);
-    if (Object.entries(asks).length || Object.entries(bids).length) {
-      orderBook.removeEventListener('message', initialOrderBook);
+  const latestBids = useRef<OrderMaps>({});
+  const latestAsks = useRef<OrderMaps>({});
 
-      return;
-    }
+  useEffect(() => {
+    const orderBook = new Worker('./orderbook.js');
 
-    setSymbol(data.s);
+    const initialOrderBook = ({ data }: any) => {
+      setBids(data.d.bids);
+      setAsks(data.d.asks);
+    };
 
-    const bidsOrderBook = addNewOrder(data.d.bids, {});
-    const asksOrderBook = addNewOrder(data.d.asks, {});
+    orderBook.addEventListener('message', initialOrderBook);
+    orderBook.addEventListener('error', () => {
+      orderBook.terminate();
+    });
+    // TODO:  close시 message인지 close, error인지 이벤트명이 일치하는지 확인해야함
+    // TODO: 에러가 있을때만 close
 
-    setBids(bidsOrderBook as any);
-    setAsks(asksOrderBook as any);
+    return () => {
+      orderBook.removeEventListener('message', () => {
+        orderBook.terminate();
+      });
+    };
+  }, [setBids, setAsks]);
+
+  const updateNewOrders = (
+    newOrders: SocketOrder[],
+    initialState: OrderMaps
+  ) => {
+    return newOrders.reduce(
+      (acc, current) => {
+        const { p: price, v: amount } = current;
+        if (Number(amount) === 0) {
+          acc[price] = null;
+        }
+
+        if (Number(amount) > 0) {
+          acc[price] = amount;
+        }
+        return acc;
+      },
+      { ...initialState }
+    );
   };
 
-  orderBook.addEventListener('message', initialOrderBook);
-  // TODO:  close시 재핑
-  orderBook.addEventListener('error', () => {
-    orderBook.terminate();
-  });
+  const throttledSetBids = throttle((newsBids) => {
+    updateBids(newsBids);
+  }, 100);
 
-  if (!Object.entries(asks).length || !Object.entries(bids).length) {
-    return <></>;
-  }
+  const throttledSetAsks = throttle((newsAsks) => {
+    updateAsks(newsAsks);
+  }, 100);
+
+  const setNewBids = useCallback(
+    (newBids: OrderMaps) => {
+      latestBids.current = newBids;
+      throttledSetBids(latestBids.current);
+    },
+    [throttledSetBids]
+  );
+
+  const setNewAsks = useCallback(
+    (newAsks: OrderMaps) => {
+      latestAsks.current = newAsks;
+      throttledSetAsks(latestAsks.current);
+    },
+    [throttledSetAsks]
+  );
+
+  useEffect(() => {
+    const newOrder = new Worker('./order.js');
+
+    const handleNewOrders = ({ data }: any) => {
+      if (data.d.bids) {
+        const updatedOrders = updateNewOrders(data.d.bids, latestBids.current);
+        setNewBids(updatedOrders);
+      }
+
+      if (data.d.asks) {
+        const updatedOrders = updateNewOrders(data.d.asks, latestAsks.current);
+        setNewAsks(updatedOrders);
+      }
+    };
+
+    newOrder.addEventListener('message', handleNewOrders);
+    newOrder.addEventListener('error', () => {
+      newOrder.terminate();
+    });
+    // TODO:  close시 message인지 close, error인지 이벤트명이 일치하는지 확인해야함
+    // TODO: 에러가 있을때만 close
+
+    return () => {
+      newOrder.removeEventListener('message', () => {
+        newOrder.terminate();
+      });
+    };
+  }, [setNewBids, setNewAsks]);
 
   return (
     <div>
-      <div>Symbol : {symbol}</div>
       <div>bids</div>
-      <ItemsGrid type={OrderType.Bid} orders={bids} />
+      <ItemsGrid type={OrderType.Bids} />
       <div>asks</div>
-      <ItemsGrid type={OrderType.Ask} orders={asks} />
+      <ItemsGrid type={OrderType.Asks} />
     </div>
   );
 }
 
 export default App;
-
-/* 
-v값이 0이면 로우에서 없애면됨
-행은 20개 정도로 잡고(10개 보다 부족함 방지)
-
-여기서 궁금한건 로우에서 없는 가격으로 매수나 매도를 걸면 호가가 변경될테고 이게 소켓으로 오는 => 옴
-
-*/

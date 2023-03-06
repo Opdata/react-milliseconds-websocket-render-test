@@ -1,8 +1,13 @@
 export enum OrderType {
-  Bid = 'bid',
-  Ask = 'ask',
+  Bids = 'bids',
+  Asks = 'asks',
 }
 
 export interface OrderMaps {
-  [price: string]: string;
+  [price: string]: string | null;
+}
+
+export interface SocketOrder {
+  p: string;
+  v: string;
 }

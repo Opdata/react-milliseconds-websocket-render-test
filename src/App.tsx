@@ -1,4 +1,4 @@
-import { useRef, useEffect, useCallback } from 'react';
+import { useRef, useEffect, useCallback, useMemo } from 'react';
 import { useDispatch } from 'react-redux';
 import ItemsGrid from './components/orderGrid';
 import { OrderType, OrderMaps, SocketOrder } from './types/orderTypes';
@@ -36,47 +36,19 @@ function App() {
   const latestBids = useRef<OrderMaps>({});
   const latestAsks = useRef<OrderMaps>({});
 
-  useEffect(() => {
-    const orderBook = new Worker('./orderbook.js');
-
-    const initialOrderBook = ({ data }: any) => {
+  const orderBookWorker = useMemo(() => new Worker('./orderbook.js'), []);
+  const orderBookEvent = useCallback(() => {
+    orderBookWorker.onmessage = ({ data }: any) => {
       setBids(data.d.bids);
       setAsks(data.d.asks);
     };
+    orderBookWorker.terminate();
+  }, [orderBookWorker, setBids, setAsks]);
 
-    orderBook.addEventListener('message', initialOrderBook);
-    orderBook.addEventListener('error', () => {
-      orderBook.terminate();
-    });
-    // TODO:  close시 message인지 close, error인지 이벤트명이 일치하는지 확인해야함
-    // TODO: 에러가 있을때만 close
-
-    return () => {
-      orderBook.removeEventListener('message', () => {
-        orderBook.terminate();
-      });
-    };
-  }, [setBids, setAsks]);
-
-  const updateNewOrders = (
-    newOrders: SocketOrder[],
-    initialState: OrderMaps
-  ) => {
-    return newOrders.reduce(
-      (acc, current) => {
-        const { p: price, v: amount } = current;
-        if (Number(amount) === 0) {
-          acc[price] = null;
-        }
-
-        if (Number(amount) > 0) {
-          acc[price] = amount;
-        }
-        return acc;
-      },
-      { ...initialState }
-    );
-  };
+  useEffect(() => {
+    orderBookEvent();
+  }, [orderBookEvent]);
+  const newOrderWorker = useMemo(() => new Worker('./order.js'), []);
 
   const throttledSetBids = throttle((newsBids) => {
     updateBids(newsBids);
@@ -102,10 +74,28 @@ function App() {
     [throttledSetAsks]
   );
 
-  useEffect(() => {
-    const newOrder = new Worker('./order.js');
+  const updateNewOrders = useCallback(
+    (newOrders: SocketOrder[], initialState: OrderMaps) => {
+      return newOrders.reduce(
+        (acc, current) => {
+          const { p: price, v: amount } = current;
+          if (Number(amount) === 0) {
+            acc[price] = null;
+          }
 
-    const handleNewOrders = ({ data }: any) => {
+          if (Number(amount) > 0) {
+            acc[price] = amount;
+          }
+          return acc;
+        },
+        { ...initialState }
+      );
+    },
+    []
+  );
+
+  const newOrderWorkerEvent = useCallback(() => {
+    newOrderWorker.onmessage = ({ data }: any) => {
       if (data.d.bids) {
         const updatedOrders = updateNewOrders(data.d.bids, latestBids.current);
         setNewBids(updatedOrders);
@@ -116,20 +106,70 @@ function App() {
         setNewAsks(updatedOrders);
       }
     };
+  }, [newOrderWorker, setNewBids, setNewAsks, updateNewOrders]);
 
-    newOrder.addEventListener('message', handleNewOrders);
-    newOrder.addEventListener('error', () => {
-      newOrder.terminate();
-    });
-    // TODO:  close시 message인지 close, error인지 이벤트명이 일치하는지 확인해야함
-    // TODO: 에러가 있을때만 close
+  useEffect(() => {
+    orderBookEvent();
+  }, [orderBookEvent]);
 
-    return () => {
-      newOrder.removeEventListener('message', () => {
-        newOrder.terminate();
-      });
-    };
-  }, [setNewBids, setNewAsks]);
+  useEffect(() => {
+    newOrderWorkerEvent();
+  }, [newOrderWorkerEvent]);
+
+  // useEffect(() => {
+  //   const orderBook = new Worker('./orderbook.js');
+
+  //   const initialOrderBook = ({ data }: any) => {
+  //     setBids(data.d.bids);
+  //     setAsks(data.d.asks);
+  //   };
+
+  //   orderBook.addEventListener('message', initialOrderBook);
+  //   orderBook.addEventListener('error', () => {
+  //     orderBook.terminate();
+  //   });
+  //   // TODO:  close시 message인지 close, error인지 이벤트명이 일치하는지 확인해야함
+  //   // TODO: 에러가 있을때만 close
+
+  //   return () => {
+  //     orderBook.removeEventListener('message', () => {
+  //       orderBook.terminate();
+  //     });
+  //   };
+  // }, [setBids, setAsks]);
+
+  // const handleNewOrders = useCallback(
+  //   ({ data }: any) => {
+  //     if (data.d.bids) {
+  //       const updatedOrders = updateNewOrders(data.d.bids, latestBids.current);
+  //       setNewBids(updatedOrders);
+  //     }
+
+  //     if (data.d.asks) {
+  //       const updatedOrders = updateNewOrders(data.d.asks, latestAsks.current);
+  //       setNewAsks(updatedOrders);
+  //     }
+  //   },
+  //   [updateNewOrders, setNewBids, setNewAsks]
+  // );
+
+  // useEffect(() => {
+  //   const newOrder = new Worker('./order.js');
+
+  //   newOrder.addEventListener('message', handleNewOrders);
+  //   // TODO: 오더 메시지를 handleNewOrder 코드가 돌아가지만, 이걸 워커에서 돌리는것을 해볼것 이후 워커에서 받을걸 메시지로 받고 그걸 state 업데이트 해보기
+  //   newOrder.addEventListener('error', () => {
+  //     newOrder.terminate();
+  //   });
+  //   // TODO:  close시 message인지 close, error인지 이벤트명이 일치하는지 확인해야함
+  //   // TODO: 에러가 있을때만 close
+
+  //   return () => {
+  //     newOrder.removeEventListener('message', () => {
+  //       newOrder.terminate();
+  //     });
+  //   };
+  // }, []);
 
   return (
     <div>

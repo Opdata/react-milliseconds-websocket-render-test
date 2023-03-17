@@ -31,3 +31,4 @@
 
 - 각 오더를 렌더링 하지 않고 ids 정렬까지만 수행했을 때는 성능의 문제가 없는걸로 확인되었음
   - 즉 렌더링해서 노드가 쌓이고 react fiber 객체가 커지고 이쪽에서 문제라는게 확실해졌음
+  - [Chrome DOM size performance docs](https://developer.chrome.com/docs/lighthouse/performance/dom-size/)

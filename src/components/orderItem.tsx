@@ -3,10 +3,13 @@ import { memo, useMemo, useCallback } from 'react';
 import { OrderType } from '../types/orderTypes';
 import { shallowEqual, useSelector } from 'react-redux';
 import { getBids, getAsks } from '../store/selectors/orderSelectors';
+import { drop, dropRight } from 'lodash';
 
 interface OrderItemProps {
   type: OrderType;
 }
+
+const ITEMS_TO_RENDER_PER_BOOK = 100;
 
 const Price = ({ price }: string) => {
   return <div>{price}</div>;
@@ -20,35 +23,48 @@ const Value = ({ value }: string) => {
 
 export const MemoizedValue = memo(Value);
 
-// const OrderItem = ({ price, type }: any) => {
 const OrderItem = ({ type }: OrderItemProps) => {
   const state = useSelector(
     type === OrderType.Asks ? getAsks : getBids,
     shallowEqual
   );
 
-  const dc = useCallback((left, right, order) => {
-    const result = [];
+  const orderDirection = type === OrderType.Asks;
+  const setLimitFunction = useCallback(
+    (array, length) =>
+      orderDirection ? drop(array, length) : dropRight(array, length),
+    [orderDirection]
+  );
 
-    let leftIdx = 0;
-    let rightIdx = 0;
+  const dc = useMemo(
+    (left, right, order) => {
+      const array = [];
 
-    while (leftIdx < left.length && rightIdx < right.length) {
-      let leftVal = parseFloat(left[leftIdx]);
-      let rightVal = parseFloat(right[rightIdx]);
+      let leftIdx = 0;
+      let rightIdx = 0;
 
-      if ((order && leftVal <= rightVal) || (!order && leftVal >= rightVal)) {
-        result.push(left[leftIdx]);
-        leftIdx++;
-      } else {
-        result.push(right[rightIdx]);
-        rightIdx++;
+      while (leftIdx < left.length && rightIdx < right.length) {
+        let leftVal = parseFloat(left[leftIdx]);
+        let rightVal = parseFloat(right[rightIdx]);
+
+        if ((order && leftVal <= rightVal) || (!order && leftVal >= rightVal)) {
+          array.push(left[leftIdx]);
+          leftIdx++;
+        } else {
+          array.push(right[rightIdx]);
+          rightIdx++;
+        }
       }
-    }
-    return result.concat(left.slice(leftIdx), right.slice(rightIdx));
-  }, []);
+      const result = array.concat(left.slice(leftIdx), right.slice(rightIdx));
+      return setLimitFunction(result, result.length - ITEMS_TO_RENDER_PER_BOOK);
 
-  const mergeSort = useCallback(
+      // return array.concat(left.slice(leftIdx), right.slice(rightIdx));
+    },
+    [setLimitFunction]
+    // []
+  );
+
+  const mergeSort = useMemo(
     (arr, order) => {
       if (arr.length <= 1) {
         return arr;
@@ -62,22 +78,33 @@ const OrderItem = ({ type }: OrderItemProps) => {
     },
     [dc]
   );
-  const ids = useMemo(() => Object.keys(state), [state]);
+  // const ids = useMemo(() => Object.keys(state), [state]);
+  const ids = Object.keys(state);
 
-  const ordersIdsFunction = useMemo(
-    () => mergeSort(ids, type === OrderType.Bids),
-    [mergeSort, type, ids]
+  const orderIdsList = useMemo(
+    () => mergeSort(ids, orderDirection),
+    [mergeSort, ids, orderDirection]
   );
 
-  return ordersIdsFunction.map((price) => {
-    const value = state[price];
-    return (
-      <div key={price} style={{ display: 'flex', gap: '50px' }}>
-        <MemoizedPrice price={price} />
-        <MemoizedValue value={value} />
-      </div>
-    );
-  });
+  if (!orderIdsList.length) {
+    return <></>;
+  }
+
+  // console.log('orderIdsList : ', orderIdsList.length);
+  // console.log('type : ', type);
+  // console.log('state : ', state);
+  // console.log('state.length : ', Object.keys(state).length);
+
+  // return orderIdsList.map((price) => {
+  //   const value = state[price];
+  //   return (
+  //     <div key={price} style={{ display: 'flex', gap: '50px' }}>
+  //       <MemoizedPrice price={price} />
+  //       <MemoizedValue value={value} />
+  //     </div>
+  //   );
+  // });
+  return <></>;
 };
 
 export default memo(OrderItem);

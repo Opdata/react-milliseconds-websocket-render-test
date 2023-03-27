@@ -3,7 +3,7 @@ import { Payload } from '../reducers/orderReducers';
 
 const setBidsOrderBook = createAction<Payload>('bids/bidsOrderBook');
 const setAsksOrderBook = createAction<Payload>('asks/asksOrderBook');
-const addBidsOrder = createAction<Payload>('bids/addBids');
-const addAsksOrder = createAction<Payload>('asks/addAsks');
+const setBidsOrder = createAction<Payload>('bids/setBids');
+const setAsksOrder = createAction<Payload>('asks/setAsks');
 
-export { setBidsOrderBook, setAsksOrderBook, addBidsOrder, addAsksOrder };
+export { setBidsOrderBook, setAsksOrderBook, setBidsOrder, setAsksOrder };
